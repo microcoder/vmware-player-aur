@@ -1,0 +1,139 @@
+# Run right before files are extracted. One argument is passed: new package full version string
+# pre_install() {
+
+# }
+
+### Run right after files are extracted. One argument is passed: new package full version string
+post_install() {
+
+  # # Load kernel modules if they are installed
+  # if modinfo vmmon > /dev/null 2>&1 && modinfo vmnet > /dev/null 2>&1; then  # checking, if module installed
+  #   if ! lsmod | vmmon $m 2>&1 > /dev/null; then  # checking, if module do not loaded
+  #     modprobe vmmon
+  #   fi
+
+  #   if ! lsmod | vmnet $m > /dev/null 2>&1; then  # checking, if module do not loaded
+  #     systemctl start vmware-networks.service
+  #   fi
+  # fi
+
+  systemctl enable vmware-usbarbitrator.service
+  systemctl start vmware-usbarbitrator.service
+  systemctl restart vmware-networks-configuration.service # Creating net config in /etc/vmware
+  systemctl enable vmware-networks.service
+  
+  # This command need for recompilation all kernel modules:
+  # vmware-modconfig --console --install-all
+
+  cat << EOF
+
+==> Before using VMware, you need start VMWare Player for building kernel modules
+
+EOF
+
+}
+
+### Run right before files are extracted. Two arguments are passed in this order: new package full version string, old package full version string
+pre_upgrade() {
+  systemctl stop vmware-usbarbitrator.service
+  systemctl stop vmware-networks.service
+
+  # backup database
+  mv /etc/vmware-installer/database /etc/vmware-installer/database.bak
+
+  # Unloading kernel modules
+  for mod in vmmon vmnet; do
+    modprobe -r $mod > /dev/null; # 2>&1
+  done
+
+  # Deleting kernel modules of VMWare Player
+  for mod in vmmon vmnet; do
+    mod_filename=$(modinfo $mod | grep filename | sed 's/^filename: *//')
+    rm "$mod_filename"
+    rmdir --ignore-fail-on-non-empty "$(dirname $mod_filename)" # Try remove empty dir
+  done
+
+  depmod # Rebuilding modules database (/lib/midules/$(uname -r)/modules*) after deleting files
+}
+
+### Run after files are extracted. Two arguments are passed in this order: new package full version string, old package full version string
+post_upgrade() {
+
+  echo 'Setuping new settings for /etc/vmware-installer/database'
+
+  # Migration setting of vmware-installer database
+  sqlite3 << EOF
+  attach '/etc/vmware-installer/database' as db_new;
+  attach '/etc/vmware-installer/database.bak' as db_old;
+
+  --Moving records from db_old.files to db_new.files
+  INSERT OR REPLACE INTO db_new.files (id, path, mtime, type, component_id)
+  SELECT *
+    FROM db_old.files;
+
+  --Moving records from db_old.setting to db_new.setting
+  INSERT OR REPLACE INTO db_new.settings (key, value, component_name)
+  SELECT *
+    FROM db_old.settings as t
+    WHERE t.component_name in ('vmware-player-app', 'vmware-player', 'vmware-vmx');
+
+  -- Moving excepting setting from db_old to db_new
+  INSERT INTO db_new.settings
+  SELECT *
+    FROM db_old.settings as t
+    WHERE t.key in (SELECT key FROM db_old.settings
+                    EXCEPT
+                    SELECT key FROM db_new.settings);
+EOF
+
+  rm /etc/vmware-installer/database.bak
+
+  systemctl daemon-reload
+
+  systemctl start vmware-networks.service
+  systemctl start vmware-usbarbitrator.service
+}
+
+### Run right before files are removed. One argument is passed: old package full version string
+pre_remove() {
+  
+  # Calling native VMWare installer/Uninstaller:
+  /usr/bin/vmware-installer -u vmware-player
+
+  systemctl stop vmware-usbarbitrator.service
+  systemctl disable vmware-usbarbitrator.service
+
+  systemctl stop vmware-networks.service
+  systemctl disable vmware-networks.service
+
+  ############################################################################################################
+  ###### This code needed as alternative uninstalling kernel modules instead native vmware uninstaller #######
+  # Unloading kernel modules
+  for mod in vmmon vmnet; do
+    modprobe -r $mod > /dev/null; # 2>&1
+  done
+
+  # Deleting kernel modules of VMWare Player
+  for mod in vmmon vmnet; do
+    mod_filename=$(modinfo $mod | grep filename | sed 's/^filename: *//')
+    rm "$mod_filename"
+    rmdir --ignore-fail-on-non-empty "$(dirname $mod_filename)" # Try remove empty dir
+  done
+
+  depmod # Rebuilding modules database (/lib/midules/$(uname -r)/modules*) after deleting files
+  ############################################################################################################
+}
+
+### Run right after files are removed. One argument is passed: old package full version string
+post_remove() {
+
+  # TODO: Сделать удаление модулей для старых ядер в:
+  # /lib/modules/4.20.15-1-MANJARO/misc/vmmon.ko
+  # /lib/modules/4.20.15-1-MANJARO/misc/vmnet.ko
+
+  cat << EOF
+
+==> To remove VMware settings, delete /etc/vmware and /etc/vmware-installer directories.
+
+EOF
+}

@@ -1,0 +1,10 @@
+[Unit]
+Description=VMware USB Arbitrator
+
+[Service]
+ExecStart=/usr/lib/vmware/bin/vmware-usbarbitrator -f
+ExecStop=/usr/lib/vmware/bin/vmware-usbarbitrator --kill
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

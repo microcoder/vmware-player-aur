@@ -1,0 +1,464 @@
+#!/usr/bin/env bash
+#
+# Copyright 1998-2008,2018 VMware, Inc.  All rights reserved.
+#
+# This script manages the services needed to run VMware software.
+#
+
+# VMWARE_INIT_INFO
+
+. /etc/vmware/bootstrap
+libdir="$LIBDIR/vmware"
+. "$libdir/scripts/util.sh"
+
+load_settings "$libdir" || exit 1
+
+VNETLIB_LOG=/var/log/vnetlib
+PRODUCT_NAME="vmware-vmx"
+COMPONENT_NAME="vmware-vmx"
+
+subsys=vmware
+driver=vmmon
+vnet=vmnet
+vmci=vmci
+vmci_alias='pci:v000015ADd00000740sv*sd*bc*sc*i*'
+vmhgfs=vmhgfs
+vsock=vsock
+vsock_alias=vmware_vsock
+
+vmciNode=vmci
+vsockNode=vsock
+
+# SHM settings
+shmmaxPath=/proc/sys/kernel/shmmax
+shmmaxMinValue=268435456 # 256MB
+
+#
+# Are we running in a VM?
+#
+vmwareInVM() {
+   "$BINDIR"/checkvm >/dev/null 2>&1
+}
+
+#
+# Report a positive number if there are any VMs running.
+# May not be the actual vmmon reference count.
+#
+vmmonUseCount() {
+   local count
+   # Beware of module dependencies here. An exact match is important
+   count=`/sbin/lsmod | awk 'BEGIN {n = 0} {if ($1 == "'"$driver"'") n = $3} END {print n}'`
+   # If CONFIG_MODULE_UNLOAD is not set in the kernel, lsmod prints '-' instead of the
+   # reference count, so ask vmrun, or if we don't have vmrun, look for running vmx processes
+   if [ x${count} = "x-" ]
+   then
+      type vmrun > /dev/null 2>&1
+      if [ $? -eq 0 ]
+      then
+         count=`vmrun list | awk 'BEGIN {n=0} /^Total running VMs:/ {n = $4} END {print n}'`
+      else
+         count=`ps -afe | grep "/bin/vmware-vmx" | grep -v grep | wc -l`
+      fi
+   fi
+   echo $count
+}
+
+# Is a given module loaded?
+isLoaded() {
+   local module="$1"
+
+   /sbin/lsmod | awk 'BEGIN {n = "no";} {if ($1 == "'"$module"'") n = "yes";} END {print n;}'
+}
+
+# Build a Linux kernel integer version
+kernelVersionInteger() {
+   echo $(((($1 * 256) + $2) * 256 + $3))
+}
+
+# Get the running kernel integer version
+getVersionInteger() {
+   local version_uts
+   local v1
+   local v2
+   local v3
+
+   version_uts=`uname -r`
+
+   # There is no double quote around the back-quoted expression on purpose
+   # There is no double quote around $version_uts on purpose
+   set -- `IFS='.'; echo $version_uts`
+   v1="$1"
+   v2="$2"
+   v3="$3"
+   # There is no double quote around the back-quoted expression on purpose
+   # There is no double quote around $v3 on purpose
+   set -- `IFS='-ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz'; echo $v3`
+   v3="$1"
+
+   kernelVersionInteger "$v1" "$v2" "$v3"
+}
+
+vmwareLoadModule() {
+   /sbin/modprobe "$1" || exit 1
+}
+
+vmwareUnloadModule() {
+   [ "`isLoaded "$1"`" = 'no' ] && return 0
+   # if we ran depmod after removing the modules modprobe -r will not work:
+   /sbin/modprobe -r "$1" || /sbin/rmmod $1 || exit 1
+}
+
+# Start the virtual machine monitor kernel service
+vmwareStartVmmon() {
+   vmwareLoadModule $driver
+}
+
+# Stop the virtual machine monitor kernel service
+vmwareStopVmmon() {
+   vmwareUnloadModule $driver
+}
+
+# Start the virtual ethernet kernel service
+vmwareStartVmnet() {
+   vmwareLoadModule $vnet
+   # "$BINDIR"/vmware-networks --start >> $VNETLIB_LOG 2>&1
+   systemctl start vmware-networks.service
+}
+
+# Stop the virtual ethernet kernel service
+vmwareStopVmnet() {
+   systemctl stop vmware-networks.service
+   # "$BINDIR"/vmware-networks --stop >> $VNETLIB_LOG 2>&1
+   vmwareUnloadModule $vnet
+}
+
+# Returns 0 if networking is enabled, otherwise 1
+vmwareIsNetworkingEnabled() {
+  [ "$vmdb_NETWORKING" = 'yes' ]
+  return
+}
+
+vmwareRealModName() {
+   # modprobe might be old and not understand the -R option, or
+   # there might not be an alias. In both cases we assume
+   # that the module is not upstreamed.
+   mod=$1
+   mod_alias=$2
+   alias_file="/lib/modules/$(uname -r)/modules.alias"
+
+   modname=$(/sbin/modprobe -R ${mod_alias} 2>/dev/null)
+   if [ $? = 0 -a "$modname" != "" ] ; then
+	echo $modname
+   elif grep -F ${mod_alias} ${alias_file} >/dev/null 2>&1 ; then
+	echo $(grep -F ${mod_alias} ${alias_file} | awk '{print $3}')
+   else
+	echo $mod
+   fi
+}
+
+# Start the virtual machine communication interface kernel service
+vmwareStartVmci() {
+   mod=$(vmwareRealModName $vmci $vmci_alias)
+
+   # only load vmci if it's not already loaded
+   if [ "`isLoaded "$mod"`" = 'no' ]; then
+      vmwareLoadModule "$mod"
+   fi
+   vmware_rm_stale_node "$vmciNode"
+   if [ ! -e "/dev/$vmciNode" ]; then
+      local minor=`cat /proc/misc | grep $vmciNode | awk '{print $1}'`
+      mknod --mode=666 "/dev/$vmciNode" c 10 "$minor"
+   else
+      chmod 666 "/dev/$vmciNode"
+   fi
+
+   return 0
+}
+
+# Make sure the system has enough shared memory available to cover shmmaxMinValue.
+# To handle overflow/wrapping, check that shmmax is greater than 1 since any overflow
+# will make shmmax look negative.  At least until shmmax or shmmaxMinValue wrap around
+# again.
+vmwareCheckSharedMemory() {
+   if [ -f "$shmmaxPath" ]; then
+      shmmax=`cat $shmmaxPath`
+      # Account for numbers that are too large that they wrap around and alias
+      # to a smaller number or they are outright set to -1.  If "1 < XXXX" fails
+      # then the XXX value is # out of bounds.  The only acceptable combo is that
+      # both values satisfy that condition, else report that the max value the
+      # system supports may not satisfy this programs requirements.
+      if  ((  $shmmax < 1 )) || (( $shmmaxMinValue < 1 )) \
+       || (( $shmmax < $shmmaxMinValue )) ; then
+         echo "$shmmaxMinValue" > "$shmmaxPath"
+         echo ""
+         echo "Setting the max shared memory the system will allow to $shmmaxMinValue."
+         echo ""
+      fi
+   fi
+   return 0
+}
+
+
+# Stop the virtual machine communication interface kernel service
+vmwareStopVmci() {
+   # Hosted now has to interface with Tools.  vmhgfs could possibly be loaded, which
+   # will interfere with the removal of vmci.  Only unload it if it's already
+   # loaded.
+   if [ "`isLoaded "$vmhgfs"`" = 'yes' ]; then
+      vmwareUnloadModule "$vmhgfs"
+   fi
+
+   mod=$(vmwareRealModName $vmci $vmci_alias)
+
+   # only unload vmci if it's already loaded
+   if [ "`isLoaded "${mod}"`" = 'yes' ]; then
+      vmwareUnloadModule "${mod}"
+   fi
+   rm -f "/dev/$vmciNode"
+}
+
+isVmciNeeded() {
+   if [ "$vmdb_VMCI_CONFED" = 'yes' ]; then
+      echo yes
+   else
+      echo no
+   fi
+}
+
+# starts after vmci is loaded
+vmwareStartVsock() {
+   mod=$(vmwareRealModName $vsock $vsock_alias)
+   # only load vsock if it's not already loaded
+   if [ "`isLoaded "$mod"`" = 'no' ]; then
+      vmwareLoadModule "$mod"
+   fi
+   vmware_rm_stale_node "$vsockNode"
+   # Give udev 5 seconds to create our node
+   vmware_delay_for_node "/dev/$vsockNode" 5
+   if [ ! -e "/dev/$vsockNode" ]; then
+      local minor=`cat /proc/misc | grep $vsockNode | awk '{print $1}'`
+      mknod --mode=666 "/dev/$vsockNode" c 10 "$minor"
+   else
+      chmod 666 "/dev/$vsockNode"
+   fi
+
+   return 0
+}
+
+# unloads before vmci
+vmwareStopVsock() {
+   mod=$(vmwareRealModName $vsock $vsock_alias)
+   # only unload vsock if it's already loaded
+   if [ "`isLoaded "$mod"`" = 'yes' ]; then
+     vmwareUnloadModule "$mod"
+   fi
+   rm -f /dev/vsock
+}
+
+isVsockNeeded() {
+   if [ "$vmdb_VSOCK_CONFED" = 'yes' ]; then
+      echo yes
+   else
+      echo no
+   fi
+}
+
+vmware_start_authdlauncher() {
+   vmware_bg_exec "`vmware_product_name` Authentication Daemon" \
+      "$SBINDIR/vmware-authdlauncher"
+}
+
+vmware_stop_authdlauncher() {
+   local launcherpid=`pidof vmware-authdlauncher`
+   if [ -n "$launcherpid" ]; then
+      vmware_synchrone_kill $launcherpid "TERM"
+   fi
+}
+
+vmwareService() {
+   case "$1" in
+      start)
+         if vmwareInVM; then
+            # Refuse to start services in a VM: they are useless
+            exit 1
+         fi
+
+         echo 'Starting VMware services:'
+         exitcode='0'
+
+         vmware_exec 'Virtual machine monitor' vmwareStartVmmon
+         exitcode=$(($exitcode + $?))
+
+         if [ "`isVmciNeeded`" = 'yes' ]; then
+            vmware_exec 'Virtual machine communication interface' vmwareStartVmci
+            exitcode=$(($exitcode + $?))
+         fi
+
+         # vsock needs vmci started first
+         if [ "`isVsockNeeded`" = 'yes' ]; then
+            vmware_exec 'VM communication interface socket family' vmwareStartVsock
+            # a vsock failure to load shouldn't cause the init to fail completely.
+         fi
+
+         if [ "`is_vmblock_needed`" = 'yes' ] ; then
+            vmware_exec 'Blocking file system' vmware_start_vmblock
+            exitcode=$(($exitcode + $?))
+         fi
+
+         # Try to load parport_pc.
+         /sbin/modprobe parport_pc >/dev/null 2>&1
+
+         if vmwareIsNetworkingEnabled; then
+            vmware_exec 'Virtual ethernet' vmwareStartVmnet
+            exitcode=$(($exitcode + $?))
+         fi
+
+         vmware_exec 'VMware Authentication Daemon' vmware_start_authdlauncher
+
+         if [ "$exitcode" -gt 0 ]; then
+            exit 1
+         fi
+
+         [ -d /var/lock/subsys ] || mkdir -p /var/lock/subsys
+         touch /var/lock/subsys/"$subsys"
+
+         vmware_exec "Shared Memory Available"  vmwareCheckSharedMemory
+      ;;
+
+      stop)
+         echo 'Stopping VMware services:'
+         exitcode='0'
+
+         vmware_exec 'VMware Authentication Daemon' vmware_stop_authdlauncher
+
+         # If the 'K' version of this script is running, the system is
+         # stoping services not because the user is running vmware-config.pl
+         # or running the initscript directly but because the user wants to
+         # shutdown.  Suspend all VMs.
+         if [ "`echo $BASENAME | sed -ne '/^K[0-9].vmware/p'`" ] ; then
+            if [ -x "$BINDIR"/vmrun ] ; then
+               for i in `pidof vmware-vmx` ; do
+                  "$BINDIR"/vmrun suspend `ps -p $i -f | \
+                       sed -ne '/vmware/s/.* \(\/.*\.vmx\)/\1/p'` 2> /dev/null
+               done
+            fi
+
+         fi
+
+         if [ "`vmmonUseCount`" -gt 0 ]; then
+            echo 'At least one instance of '"$PRODUCT_NAME"' is still running.' 1>&2
+            echo 'Please stop all running instances of '"$PRODUCT_NAME"' first.' 1>&2
+            echo " " >&2
+
+            # Since we stopped authdlauncher to prevent new connections before disabling
+            # any vmxs, need to restart it here to restore the environment back to
+            # what it was before this init script ran.
+            vmware_exec 'VMware Authentication Daemon' vmware_start_authdlauncher
+
+            # The unconfigurator handle this exit code differently
+            exit 2
+         fi
+
+         # vmci is used by vsock so the module can't unload until vsock does.
+         if [ "`isVsockNeeded`" = 'yes' ]; then
+            vmware_exec 'VM communication interface socket family' vmwareStopVsock
+            exitcode=$(($exitcode + $?))
+         fi
+
+         if [ "`isVmciNeeded`" = 'yes' ]; then
+            vmware_exec 'Virtual machine communication interface' vmwareStopVmci
+            exitcode=$(($exitcode + $?))
+         fi
+
+         vmware_exec 'Virtual machine monitor' vmwareStopVmmon
+         exitcode=$(($exitcode + $?))
+
+         if [ "`is_vmblock_needed`" = 'yes' ] ; then
+            vmware_exec 'Blocking file system' vmware_stop_vmblock
+            exitcode=$(($exitcode + $?))
+         fi
+
+         # Try to unload parport_pc. Failure is allowed as it does not
+         # exist on kernels 2.0, and some other process could be using
+         # it.
+         /sbin/modprobe -r parport_pc >/dev/null 2>&1
+
+         if vmwareIsNetworkingEnabled; then
+	    vmwareStopVmnet
+         fi
+
+         # The vmware and vmware-tray processes don't terminate automatically
+         # when the other services are shutdown.  They persist after calling
+         # 'init.d/vmware stop' and will happily keep going through an init
+         # start command, continuing to minimally function, blissfully ignorant.
+         # Time for a buzzkill.
+         for i in `pidof vmware vmware-tray` ; do
+            vmware_synchrone_kill $i "INT"
+         done
+
+         if [ "$exitcode" -gt 0 ]; then
+            exit 1
+         fi
+
+         rm -f /var/lock/subsys/"$subsys"
+      ;;
+
+      status)
+         if [ "`vmmonUseCount`" -gt 0 ]; then
+            echo 'At least one instance of '"$PRODUCT_NAME"' is still running.'
+            echo
+            if [ "$2" = "vmcount" ]; then
+               exit 2
+            fi
+         fi
+         if [ "$2" = "vmcount" ]; then
+               exit 0
+         fi
+
+         exitcode='0'
+
+         echo -n "Module $driver "
+         [ "`isLoaded "$driver"`" = 'yes' ] && echo loaded || echo "not loaded"
+         if vmwareIsNetworkingEnabled; then
+            echo -n "Module $vnet "
+            [ "`isLoaded "$vnet"`" = 'yes' ] && echo loaded || echo "not loaded"
+         fi
+
+         if [ "$exitcode" -gt 0 ]; then
+            exit 1
+         fi
+      ;;
+
+      restart)
+         "$SCRIPTNAME" stop && "$SCRIPTNAME" start
+      ;;
+
+      # Called to make sure script is in a runnable state.
+      validate)
+         exit 100
+      ;;
+
+      stoppable)
+	 [ "`vmmonUseCount`" -lt 1 ]
+	 exit
+      ;;
+
+      *)
+         echo "Usage: "$BASENAME" {start|stop|status|restart|stoppable}"
+         exit 1
+   esac
+}
+
+SCRIPTNAME="$0"
+BASENAME=`basename "$SCRIPTNAME"`
+
+# Check permissions
+if [ "`id -ur`" != '0' ]; then
+   echo 'Error: you must be root.'
+   echo
+   exit 1
+fi
+
+vmwareService "$1"
+
+exit 0
