@@ -90,10 +90,18 @@ prepare() {
     #################### Patch original files
     kernel_version="$(uname -r | cut -d '-' -f 1)"
     patch_dir="${srcdir}/patch"
-    
-    if [[ "${pkgver}" == 15.1.0 ]] && [[ "${kernel_version}" > 5.0.999 ]]; then
-        # INFO: https://github.com/mkubecek/vmware-host-modules/blob/player-15.1.0/INSTALL
 
+    if [[ "${pkgver}" > 14.999 && "${pkgver}" < 15.0.999 ]] && [[ "${kernel_version}" > 4.999 ]]; then
+        # INFO: https://github.com/mkubecek/vmware-host-modules/blob/player-15.0.0/INSTALL
+        install -d -m 755 "${patch_dir}"
+        cd "${patch_dir}"
+        git clone https://github.com/mkubecek/vmware-host-modules.git
+        cd vmware-host-modules
+        git checkout "player-${pkgver}"
+        tar -cf ${srcdir}/extracted/vmware-vmx/lib/modules/source/vmmon.tar vmmon-only
+        tar -cf ${srcdir}/extracted/vmware-vmx/lib/modules/source/vmnet.tar vmnet-only
+    elif [[ "${pkgver}" > 15.0.999 && "${pkgver}" < 15.1.999 ]] && [[ "${kernel_version}" > 5.0.999 ]]; then
+        # INFO: https://github.com/mkubecek/vmware-host-modules/blob/player-15.1.0/INSTALL
         install -d -m 755 "${patch_dir}"
         cd "${patch_dir}"
         git clone https://github.com/mkubecek/vmware-host-modules.git
