@@ -79,6 +79,18 @@ md5sums_x86_64=('02580e483bf7034641269696838b3d33'
                 'e535a198f2eae87c2446aa38c6006385')
 
 #-------------------------------------------------------------------
+patch_host_modules() {
+    # INFO: https://github.com/mkubecek/vmware-host-modules/blob/player-15.1.0/INSTALL
+    patch_dir="${srcdir}/patch"
+    install -d -m 755 "${patch_dir}"
+    cd "${patch_dir}"
+    git clone https://github.com/mkubecek/vmware-host-modules.git
+    cd vmware-host-modules
+    git checkout "player-${pkgver}"
+    tar -cf ${srcdir}/extracted/vmware-vmx/lib/modules/source/vmmon.tar vmmon-only
+    tar -cf ${srcdir}/extracted/vmware-vmx/lib/modules/source/vmnet.tar vmnet-only
+}
+
 prepare() {
     # VMware-Player-*.bundle is a bash executable script (binary data).
     # You can verify this with the `file` utility: $ file VMware-Player-*.bundle
@@ -89,26 +101,11 @@ prepare() {
 
     #################### Patch original files
     kernel_version="$(uname -r | cut -d '-' -f 1)"
-    patch_dir="${srcdir}/patch"
 
     if [[ "${pkgver}" > 14.999 && "${pkgver}" < 15.0.999 ]] && [[ "${kernel_version}" > 4.999 ]]; then
-        # INFO: https://github.com/mkubecek/vmware-host-modules/blob/player-15.0.0/INSTALL
-        install -d -m 755 "${patch_dir}"
-        cd "${patch_dir}"
-        git clone https://github.com/mkubecek/vmware-host-modules.git
-        cd vmware-host-modules
-        git checkout "player-${pkgver}"
-        tar -cf ${srcdir}/extracted/vmware-vmx/lib/modules/source/vmmon.tar vmmon-only
-        tar -cf ${srcdir}/extracted/vmware-vmx/lib/modules/source/vmnet.tar vmnet-only
+        patch_host_modules
     elif [[ "${pkgver}" > 15.0.999 && "${pkgver}" < 15.1.999 ]] && [[ "${kernel_version}" > 5.0.999 ]]; then
-        # INFO: https://github.com/mkubecek/vmware-host-modules/blob/player-15.1.0/INSTALL
-        install -d -m 755 "${patch_dir}"
-        cd "${patch_dir}"
-        git clone https://github.com/mkubecek/vmware-host-modules.git
-        cd vmware-host-modules
-        git checkout "player-${pkgver}"
-        tar -cf ${srcdir}/extracted/vmware-vmx/lib/modules/source/vmmon.tar vmmon-only
-        tar -cf ${srcdir}/extracted/vmware-vmx/lib/modules/source/vmnet.tar vmnet-only
+        patch_host_modules
     fi;
 }
 
