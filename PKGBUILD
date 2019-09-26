@@ -158,7 +158,7 @@ package() {
     cp -r "${srcdir}/extracted/vmware-network-editor/lib" "${pkgdir}/usr/lib/vmware"
     cp -r "${srcdir}/extracted/vmware-virtual-printer"/VirtualPrinter-*.iso "${pkgdir}/usr/lib/vmware/isoimages"
 
-    cp -r "${srcdir}/extracted/vmware-installer"/{bin,cdsHelper/bin,lib,cdsHelper/lib,python,sopython,vmis} "${pkgdir}/usr/lib/vmware-installer/$vmware_installer_version"
+    cp -r "${srcdir}/extracted/vmware-installer"/{bin,cdsHelper,lib,python,sopython,vmis} "${pkgdir}/usr/lib/vmware-installer/$vmware_installer_version"
     cp -r "${srcdir}/extracted/vmware-installer"/{vmis-launcher,vmware-installer,vmware-installer.py} "${pkgdir}/usr/lib/vmware-installer/$vmware_installer_version"
     install -m 755 "${srcdir}/vmware-configure-initscript.sh" "${pkgdir}/usr/lib/vmware-installer/$vmware_installer_version/bin/configure-initscript.sh"
     cp -T "${srcdir}/extracted/vmware-installer/bootstrap" "${pkgdir}/etc/vmware-installer/bootstrap"
