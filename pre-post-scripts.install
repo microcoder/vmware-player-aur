@@ -38,15 +38,17 @@ pre_upgrade() {
   systemctl stop vmware-usbarbitrator.service
   systemctl stop vmware-networks.service
 
-  # backup database
+  # Backup database
+  echo 'Backup database: /etc/vmware-installer/database'
   mv /etc/vmware-installer/database /etc/vmware-installer/database.bak
 
+  echo 'Remove kernel modules: vmmon vmnet'
   # Unloading kernel modules
   for mod in vmmon vmnet; do
     modprobe -r $mod > /dev/null; # 2>&1
   done
 
-  # Deleting kernel modules of VMWare Player
+  # Remove kernel modules of VMWare Player
   for mod in vmmon vmnet; do
     mod_filename=$(modinfo $mod | grep filename | sed 's/^filename: *//')
     rm "$mod_filename"
@@ -59,7 +61,7 @@ pre_upgrade() {
 ### Run after files are extracted. Two arguments are passed in this order: new package full version string, old package full version string
 post_upgrade() {
 
-  echo 'Setuping new settings for /etc/vmware-installer/database'
+  echo 'Migration settings to new database /etc/vmware-installer/database'
 
   # Migration setting of vmware-installer database
   sqlite3 << EOF
@@ -108,6 +110,8 @@ pre_remove() {
 
   ############################################################################################################
   ###### This code needed as alternative uninstalling kernel modules instead native vmware uninstaller #######
+  echo 'Remove kernel modules: vmmon vmnet'
+  
   # Unloading kernel modules
   for mod in vmmon vmnet; do
     modprobe -r $mod > /dev/null; # 2>&1

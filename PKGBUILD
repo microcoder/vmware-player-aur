@@ -18,9 +18,9 @@
 
 pkgname=vmware-player
 pkgdesc='VMware Player'
-pkgver=15.1.0
-pkgbuild=13591040
-pkgrel=2
+pkgver=15.5.0
+pkgbuild=14665864
+pkgrel=1
 arch=('x86_64')
 url='https://www.vmware.com/products/workstation-player.html'
 license=('custom: commercial')
@@ -68,25 +68,35 @@ source_x86_64=(
     vmware-modules-load.conf         # Config file of auto load kernel modules. Installing to /usr/lib/modules-load.d/vmware.conf
 )
 # For update/generate MD5 sum for source files, run `updpkgsums`
-md5sums_x86_64=('02580e483bf7034641269696838b3d33'
+md5sums_x86_64=('80c8f248129673cbdf2073f47ff73d19'
                 'b691e490f36ec574cfb301873deb6b1c'
                 '5a4d539f587486f3b778eaebd76e780e'
                 'fcd2864ee465b1925592c65eb8e65ca3'
                 '5a64ef908a36f1ce2638ed08fd7d12fb'
                 '9d2c6433034063b0f1d5bbd415200b4a'
                 'eda04a578c729b4177d65e3b3f4f1fff'
-                '1722b8b6ff78ac1b185a5e34517f94d6'
+                'a73032159fe18903d882400210be2fda'
                 'e535a198f2eae87c2446aa38c6006385')
 
 #-------------------------------------------------------------------
-patch_host_modules() {
-    # INFO: https://github.com/mkubecek/vmware-host-modules/blob/player-15.1.0/INSTALL
-    patch_dir="${srcdir}/patch"
+patch_kernel_modules() {
+    echo "==> Downloading patched vmware kernel modules"
+    # INFO: https://github.com/mkubecek/vmware-host-modules/blob/player-15.5.0/INSTALL
+
+    patch_dir="${srcdir}/patched_kernel_modules"
+    rm -rf "${patch_dir}"
     install -d -m 755 "${patch_dir}"
     cd "${patch_dir}"
+
     git clone https://github.com/mkubecek/vmware-host-modules.git
     cd vmware-host-modules
     git checkout "player-${pkgver}"
+
+    # wget -c https://github.com/mkubecek/vmware-host-modules/archive/p15.5.0-k5.2.zip
+    # unzip -q p15.5.0-k5.2.zip
+    # rm p15.5.0-k5.2.zip
+    # cd vmware-host-modules-p15.5.0-k5.2
+
     tar -cf ${srcdir}/extracted/vmware-vmx/lib/modules/source/vmmon.tar vmmon-only
     tar -cf ${srcdir}/extracted/vmware-vmx/lib/modules/source/vmnet.tar vmnet-only
 }
@@ -99,13 +109,9 @@ prepare() {
     [[ -d "$extracted_dir" ]] && rm -r "$extracted_dir"
     bash "$(readlink -f "${srcdir}/VMware-Player-${pkgver}-${pkgbuild}.${CARCH}.bundle")" --extract "$extracted_dir"
 
-    #################### Patch original files
     kernel_version="$(uname -r | cut -d '-' -f 1)"
-
-    if [[ "${pkgver}" > 14.999 && "${pkgver}" < 15.0.999 ]] && [[ "${kernel_version}" > 4.999 ]]; then
-        patch_host_modules
-    elif [[ "${pkgver}" > 15.0.999 && "${pkgver}" < 15.1.999 ]] && [[ "${kernel_version}" > 5.0.999 ]]; then
-        patch_host_modules
+    if [[ "${pkgver}" > 14.999 && "${pkgver}" < 16.0 ]] && [[ "${kernel_version}" > 4.8 ]]; then
+        patch_kernel_modules
     fi;
 }
 
@@ -123,7 +129,7 @@ package() {
         "${pkgdir}/usr/lib/systemd"/{system,scripts} \
         "${pkgdir}/usr/lib/vmware"/{bin,lib,setup,isoimages,modules} \
         "${pkgdir}/usr/lib/vmware-ovftool"/{certs,env,schemas} \
-        "${pkgdir}/usr/lib/vmware-installer/$vmware_installer_version"/{vmis,lib/lib,artwork} \
+        "${pkgdir}/usr/lib/vmware-installer/$vmware_installer_version"/{bin,lib,python,sopython,vmis} \
 
 
     #################### Coping files into the package directory
@@ -152,9 +158,9 @@ package() {
     cp -r "${srcdir}/extracted/vmware-network-editor/lib" "${pkgdir}/usr/lib/vmware"
     cp -r "${srcdir}/extracted/vmware-virtual-printer"/VirtualPrinter-*.iso "${pkgdir}/usr/lib/vmware/isoimages"
 
-    cp -r "${srcdir}/extracted/vmware-installer"/{bin,lib/lib,python,sopython,artwork} "${pkgdir}/usr/lib/vmware-installer/$vmware_installer_version"
+    cp -r "${srcdir}/extracted/vmware-installer"/{bin,cdsHelper/bin,lib,cdsHelper/lib,python,sopython,vmis} "${pkgdir}/usr/lib/vmware-installer/$vmware_installer_version"
+    cp -r "${srcdir}/extracted/vmware-installer"/{vmis-launcher,vmware-installer,vmware-installer.py} "${pkgdir}/usr/lib/vmware-installer/$vmware_installer_version"
     install -m 755 "${srcdir}/vmware-configure-initscript.sh" "${pkgdir}/usr/lib/vmware-installer/$vmware_installer_version/bin/configure-initscript.sh"
-    cp -r "${srcdir}/extracted/vmware-installer"/{vmis,vmis-launcher,vmware-installer,vmware-installer.py} "${pkgdir}/usr/lib/vmware-installer/$vmware_installer_version"
     cp -T "${srcdir}/extracted/vmware-installer/bootstrap" "${pkgdir}/etc/vmware-installer/bootstrap"
 
     # Installation a config file of auto load kernel modules: https://www.freedesktop.org/software/systemd/man/modules-load.d.html
@@ -228,9 +234,6 @@ package() {
     sed -e "/^player.product.version/s/=.*$/= \"$pkgver\"/" \
         -e "/^product.buildNumber/s/=.*$/= \"$pkgbuild\"/" \
         -i "${pkgdir}/etc/vmware/config"
-    
-
-    #################### Patch up the VMware kernel sources and configure DKMS
 
 
     #################### Create a database which contains the list of guest tools (necessary to avoid that vmware try to download them)
