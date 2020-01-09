@@ -92,7 +92,7 @@ md5sums_x86_64=('2fd4b08354ac0e882c74108df489b627'
                 '5a64ef908a36f1ce2638ed08fd7d12fb'
                 '9d2c6433034063b0f1d5bbd415200b4a'
                 'eda04a578c729b4177d65e3b3f4f1fff'
-                'a73032159fe18903d882400210be2fda'
+                'ddaeb8d78bb152311e30b86bf2534c19'
                 'e535a198f2eae87c2446aa38c6006385')
 
 _patch_kernel_modules() {
@@ -210,8 +210,6 @@ _copy_install_files () {
     cp -r \
         "${srcdir}/extracted/vmware-virtual-printer"/VirtualPrinter-*.iso \
         "${pkgdir}/usr/lib/vmware/isoimages"
-    
-    install -m 755 "${srcdir}/vmware-configure-initscript.sh" "${pkgdir}/usr/lib/vmware-installer/${vmware_installer_version}/bin/configure-initscript.sh"
 
     cp -T \
         "${srcdir}/extracted/vmware-vmx/etc/modprobe.d/modprobe-vmware-fuse.conf" \
@@ -236,8 +234,10 @@ _copy_install_files () {
     # Installation a config file of auto load kernel modules: https://www.freedesktop.org/software/systemd/man/modules-load.d.html
     install -m 644 "${srcdir}/vmware-modules-load.conf" "${pkgdir}/usr/lib/modules-load.d/vmware.conf"
     
-    # Installation main sh-script of manager services:
+    # Installation main sh-script of manager services. See Config File - vmware-config
     install -m 755 "${srcdir}/vmware-initd" "${pkgdir}/usr/lib/systemd/scripts/vmware"
+
+    install -m 755 "${srcdir}/vmware-configure-initscript.sh" "${pkgdir}/usr/lib/vmware-installer/${vmware_installer_version}/bin/configure-initscript.sh"
 
     # Applying permissions where necessary
     chmod +x \
