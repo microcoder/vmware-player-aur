@@ -135,9 +135,11 @@ post_remove() {
   # /lib/modules/4.20.15-1-MANJARO/misc/vmmon.ko
   # /lib/modules/4.20.15-1-MANJARO/misc/vmnet.ko
 
+  rm -R /usr/lib/vmware-installer
+
   cat << EOF
 
-==> To remove VMware settings, delete /etc/vmware and /etc/vmware-installer directories.
+==> To remove VMware settings, delete: /etc/vmware and /etc/vmware-installer directories.
 
 EOF
 }
