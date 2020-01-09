@@ -79,7 +79,6 @@ source_x86_64=(
     vmware-networks.service
     vmware-usbarbitrator.service
     vmware-bootstrap
-    vmware-initd                     # Installing to /usr/lib/systemd/scripts/vmware
     vmware-config                    # Main file configuration, installing to /etc/vmware/config
     vmware-modules-load.conf         # Config file of auto load kernel modules. Installing to /usr/lib/modules-load.d/vmware.conf
 )
@@ -91,7 +90,6 @@ md5sums_x86_64=('2fd4b08354ac0e882c74108df489b627'
                 'fcd2864ee465b1925592c65eb8e65ca3'
                 '5a64ef908a36f1ce2638ed08fd7d12fb'
                 '9d2c6433034063b0f1d5bbd415200b4a'
-                'eda04a578c729b4177d65e3b3f4f1fff'
                 'ddaeb8d78bb152311e30b86bf2534c19'
                 'e535a198f2eae87c2446aa38c6006385')
 
@@ -117,38 +115,8 @@ _patch_kernel_modules() {
     tar -cf ${srcdir}/extracted/vmware-vmx/lib/modules/source/vmnet.tar vmnet-only
 }
 
-_create_database_file () {
-    echo "==> Creating database file"
-
-    local database_filename="${pkgdir}/etc/vmware-installer/database"
-    echo -n "" > "$database_filename"
-
-    sqlite3 "$database_filename" "
-        CREATE TABLE settings(key VARCHAR PRIMARY KEY, value VARCHAR NOT NULL, component_name VARCHAR NOT NULL);
-        INSERT INTO settings(key, value, component_name) VALUES('db.schemaVersion', '2', 'vmware-installer');
-    "
-
-    sqlite3 "$database_filename" "
-        CREATE TABLE components(id INTEGER PRIMARY KEY, name VARCHAR NOT NULL, version VARCHAR NOT NULL,
-                                buildNumber INTEGER NOT NULL, component_core_id INTEGER NOT NULL, longName VARCHAR NOT NULL,
-                                description VARCHAR, type INTEGER NOT NULL);
-    "
-
-    sqlite3 "$database_filename" "
-        INSERT INTO components VALUES(1,'vmware-installer','${vmware_installer_version}',${pkgbuild},-1,'VMware Installer','VMware Installer',1);
-        INSERT INTO components VALUES(2,'vmware-player-setup','${pkgver}',${pkgbuild},1,'VMware Player Setup','VMware Player Setup',1);
-        INSERT INTO components VALUES(3,'vmware-vmx','${pkgver}',${pkgbuild},1,'VMware VMX','VMware Linux VMX',1);
-        INSERT INTO components VALUES(4,'vmware-virtual-printer','1.0',${pkgbuild},1,'VMware Virtual Printer','Virtual Printer Component',1);
-        INSERT INTO components VALUES(5,'vmware-network-editor','${pkgver}',${pkgbuild},1,'VMware Network Editor','Network Editor Component for Linux',1);
-        INSERT INTO components VALUES(6,'vmware-usbarbitrator','${vmware_usbarbitrator_version}',${pkgbuild},1,'VMware USB Arbitrator','USB Arbitrator Component for Linux',1);
-        INSERT INTO components VALUES(7,'vmware-player-app','${pkgver}',${pkgbuild},1,'VMware Player Application','VMware Player Application for Linux',1);
-        INSERT INTO components VALUES(8,'vmware-ovftool','${vmware_ovftool_version}',${vmware_ovftool_build},1,'VMware OVF Tool component for Linux','VMware OVF Tool is a command-line utility that allows you to import and export OVF packages to and from many VMware products.',1);
-        INSERT INTO components VALUES(9,'vmware-player','${pkgver}',${pkgbuild},1,'VMware Player','VMware Player for Linux',0);
-    "
-}
-
-_copy_install_files () {
-    echo "==> Copying Install files"
+_copy_files () {
+    echo "==> Copying files"
 
     # Creating new empty directories in the package directory. Instead command `install -d -m 755` you can to use `mkdir -p`
     install -d -m 755 \
@@ -211,6 +179,10 @@ _copy_install_files () {
         "${srcdir}/extracted/vmware-virtual-printer"/VirtualPrinter-*.iso \
         "${pkgdir}/usr/lib/vmware/isoimages"
 
+    install -m 755 \
+        "${srcdir}/extracted/vmware-vmx/etc/init.d/vmware" \
+        "${pkgdir}/usr/lib/systemd/scripts/vmware"
+
     cp -T \
         "${srcdir}/extracted/vmware-vmx/etc/modprobe.d/modprobe-vmware-fuse.conf" \
         "${pkgdir}/etc/modprobe.d/vmware-fuse.conf"
@@ -227,17 +199,26 @@ _copy_install_files () {
     cp -T "${srcdir}/vmware-config" "${pkgdir}/etc/vmware/config"
 
     # Installation Service files:
-    install -m 644 "${srcdir}/vmware-networks-configuration.service" "${pkgdir}/usr/lib/systemd/system/vmware-networks-configuration.service"
-    install -m 644 "${srcdir}/vmware-networks.service" "${pkgdir}/usr/lib/systemd/system/vmware-networks.service"
-    install -m 644 "${srcdir}/vmware-usbarbitrator.service" "${pkgdir}/usr/lib/systemd/system/vmware-usbarbitrator.service"
+    install -m 644 \
+        "${srcdir}/vmware-networks-configuration.service" \
+        "${pkgdir}/usr/lib/systemd/system/vmware-networks-configuration.service"
+
+    install -m 644 \
+        "${srcdir}/vmware-networks.service" \
+        "${pkgdir}/usr/lib/systemd/system/vmware-networks.service"
+
+    install -m 644 \
+        "${srcdir}/vmware-usbarbitrator.service" \
+        "${pkgdir}/usr/lib/systemd/system/vmware-usbarbitrator.service"
     
     # Installation a config file of auto load kernel modules: https://www.freedesktop.org/software/systemd/man/modules-load.d.html
-    install -m 644 "${srcdir}/vmware-modules-load.conf" "${pkgdir}/usr/lib/modules-load.d/vmware.conf"
+    install -m 644 \
+        "${srcdir}/vmware-modules-load.conf" \
+        "${pkgdir}/usr/lib/modules-load.d/vmware.conf"
     
-    # Installation main sh-script of manager services. See Config File - vmware-config
-    install -m 755 "${srcdir}/vmware-initd" "${pkgdir}/usr/lib/systemd/scripts/vmware"
-
-    install -m 755 "${srcdir}/vmware-configure-initscript.sh" "${pkgdir}/usr/lib/vmware-installer/${vmware_installer_version}/bin/configure-initscript.sh"
+    install -m 755 \
+        "${srcdir}/vmware-configure-initscript.sh" \
+        "${pkgdir}/usr/lib/vmware-installer/${vmware_installer_version}/bin/configure-initscript.sh"
 
     # Applying permissions where necessary
     chmod +x \
@@ -288,8 +269,15 @@ _copy_install_files () {
 
 }
 
-_replace_placeholders () {
-    ### Replace placeholder "variables" with real paths
+_patch_files () {
+    echo "==> Patching files"
+
+    sed -r \
+        -e "s/(.+)vmware-networks --start(.+)/   systemctl start vmware-networks.service/" \
+        -e "s/(.+)vmware-networks --stop(.+)/   systemctl stop vmware-networks.service/" \
+        -i "${pkgdir}/usr/lib/systemd/scripts/vmware"
+
+    ### Replace placeholder "variables" with real paths:
 
     sed -i 's,@@LIBCONF_DIR@@,/usr/lib/vmware/libconf,g' "${pkgdir}/usr/lib/vmware/libconf/etc/gtk-3.0/gdk-pixbuf.loaders"
     sed -i 's,@@BINARY@@,/usr/bin/vmplayer,' "${pkgdir}/usr/share/applications/vmware-player.desktop"
@@ -301,12 +289,44 @@ _replace_placeholders () {
     sed -e "/^player.product.version/s/=.*$/= \"$pkgver\"/" \
         -e "/^product.buildNumber/s/=.*$/= \"$pkgbuild\"/" \
         -i "${pkgdir}/etc/vmware/config"
+
+    # Add StartupWMClass attribute to desktop files:
+    sed -i '/^StartupNotify=.*/a StartupWMClass=vmplayer' "$pkgdir/usr/share/applications/vmware-player.desktop"
+}
+
+_create_db_file () {
+    echo "==> Creating database file"
+
+    local database_filename="${pkgdir}/etc/vmware-installer/database"
+    echo -n "" > "$database_filename"
+
+    sqlite3 "$database_filename" "
+        CREATE TABLE settings(key VARCHAR PRIMARY KEY, value VARCHAR NOT NULL, component_name VARCHAR NOT NULL);
+        INSERT INTO settings(key, value, component_name) VALUES('db.schemaVersion', '2', 'vmware-installer');
+    "
+
+    sqlite3 "$database_filename" "
+        CREATE TABLE components(id INTEGER PRIMARY KEY, name VARCHAR NOT NULL, version VARCHAR NOT NULL,
+                                buildNumber INTEGER NOT NULL, component_core_id INTEGER NOT NULL, longName VARCHAR NOT NULL,
+                                description VARCHAR, type INTEGER NOT NULL);
+    "
+
+    sqlite3 "$database_filename" "
+        INSERT INTO components VALUES(1,'vmware-installer','${vmware_installer_version}',${pkgbuild},-1,'VMware Installer','VMware Installer',1);
+        INSERT INTO components VALUES(2,'vmware-player-setup','${pkgver}',${pkgbuild},1,'VMware Player Setup','VMware Player Setup',1);
+        INSERT INTO components VALUES(3,'vmware-vmx','${pkgver}',${pkgbuild},1,'VMware VMX','VMware Linux VMX',1);
+        INSERT INTO components VALUES(4,'vmware-virtual-printer','1.0',${pkgbuild},1,'VMware Virtual Printer','Virtual Printer Component',1);
+        INSERT INTO components VALUES(5,'vmware-network-editor','${pkgver}',${pkgbuild},1,'VMware Network Editor','Network Editor Component for Linux',1);
+        INSERT INTO components VALUES(6,'vmware-usbarbitrator','${vmware_usbarbitrator_version}',${pkgbuild},1,'VMware USB Arbitrator','USB Arbitrator Component for Linux',1);
+        INSERT INTO components VALUES(7,'vmware-player-app','${pkgver}',${pkgbuild},1,'VMware Player Application','VMware Player Application for Linux',1);
+        INSERT INTO components VALUES(8,'vmware-ovftool','${vmware_ovftool_version}',${vmware_ovftool_build},1,'VMware OVF Tool component for Linux','VMware OVF Tool is a command-line utility that allows you to import and export OVF packages to and from many VMware products.',1);
+        INSERT INTO components VALUES(9,'vmware-player','${pkgver}',${pkgbuild},1,'VMware Player','VMware Player for Linux',0);
+    "
 }
 
 prepare() {
     # VMware-Player-*.bundle is a bash executable script (binary data).
     # You can verify this with the `file` utility: $ file VMware-Player-*.bundle
-
     extracted_dir="${srcdir}/extracted"
     [[ -d "$extracted_dir" ]] && rm -r "$extracted_dir"
     bash "$(readlink -f "${srcdir}/VMware-Player-${pkgver}-${pkgbuild}.${CARCH}.bundle")" --extract "$extracted_dir"
@@ -326,10 +346,8 @@ package() {
         _patch_kernel_modules
     fi;
 
-    _copy_install_files
-    _replace_placeholders
-    _create_database_file
+    _copy_files
+    _patch_files
+    _create_db_file
 
-    # Add StartupWMClass attribute to desktop files
-    sed -i '/^StartupNotify=.*/a StartupWMClass=vmplayer' "$pkgdir/usr/share/applications/vmware-player.desktop"
 }
