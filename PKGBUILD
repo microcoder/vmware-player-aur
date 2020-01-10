@@ -15,6 +15,10 @@
 # Попытаться убрать их из /lib/modprobe.d, /lib/modules-load.d и перенести в
 # /etc/modprobe.d и соответственно в /etc/modules-load.d
 
+# FIXME: 
+# Не компилируется модуль vmci после установки пакета. Запустить компиляцию после установки пакета вручную:
+#   sudo vmware-modconfig --console --build-mod vmci
+# Возможно это проблема с ядром Linux 5.4.6 - https://communities.vmware.com/thread/623768
 
 pkgname=vmware-player
 pkgdesc='VMware Player'
@@ -118,16 +122,17 @@ _patch_kernel_modules() {
 _copy_files () {
     echo "==> Copying files"
 
-    # Creating new empty directories in the package directory. Instead command `install -d -m 755` you can to use `mkdir -p`
+    ############################## Creating new empty directories in the package directory
+    # instead command `install -d -m 755` you can use `mkdir -p`
     install -d -m 755 \
         "${pkgdir}/etc"/{cups,thnuclnt,modprobe.d,vmware,vmware-installer} \
         "${pkgdir}/usr"/{bin,lib/{modules-load.d,cups/filter},share/licenses/${pkgname}} \
         "${pkgdir}/usr/lib/systemd"/{system,scripts} \
         "${pkgdir}/usr/lib/vmware"/{bin,lib,setup,isoimages,modules} \
         "${pkgdir}/usr/lib/vmware-ovftool"/{certs,env,schemas} \
-        "${pkgdir}/usr/lib/vmware-installer/${vmware_installer_version}"/{bin,cdsHelper,lib,python,sopython,vmis} \
+        "${pkgdir}/usr/lib/vmware-installer/${vmware_installer_version}"/{bin,cdsHelper,lib,python,sopython,vmis}
 
-    # Installing files
+    ############################## Installing files
     cp -r \
         "${srcdir}/extracted/vmware-player-app/share"/* \
         "${pkgdir}/usr/share"
@@ -164,6 +169,10 @@ _copy_files () {
     cp -r \
         "${srcdir}/extracted/vmware-installer"/{bin,cdsHelper,lib,python,sopython,vmis,vmis-launcher,vmware-installer,vmware-installer.py} \
         "${pkgdir}/usr/lib/vmware-installer/${vmware_installer_version}"
+
+    install -m 755 \
+        "${srcdir}/vmware-configure-initscript.sh" \
+        "${pkgdir}/usr/lib/vmware-installer/${vmware_installer_version}/bin/configure-initscript.sh"
 
     cp -r \
         "${srcdir}/extracted/vmware-player-app/etc/cups"/* \
@@ -215,12 +224,8 @@ _copy_files () {
     install -m 644 \
         "${srcdir}/vmware-modules-load.conf" \
         "${pkgdir}/usr/lib/modules-load.d/vmware.conf"
-    
-    install -m 755 \
-        "${srcdir}/vmware-configure-initscript.sh" \
-        "${pkgdir}/usr/lib/vmware-installer/${vmware_installer_version}/bin/configure-initscript.sh"
 
-    # Applying permissions where necessary
+    ############################## Applying permissions where necessary
     chmod +x \
         "${pkgdir}/usr/bin"/* \
         "${pkgdir}/usr/lib/vmware/bin"/* \
@@ -230,12 +235,14 @@ _copy_files () {
         "${pkgdir}/usr/lib/vmware-installer/${vmware_installer_version}"/{vmware-installer,vmis-launcher} \
         "${pkgdir}/usr/lib/cups/filter"/* \
         "${pkgdir}/etc/thnuclnt/.thnumod"
+
     # chmod -R 600 "${pkgdir}/etc/vmware/ssl"
+
     chmod +s \
         "${pkgdir}/usr/bin/vmware-authd" \
         "${pkgdir}/usr/lib/vmware/bin"/{vmware-vmx,vmware-vmx-debug,vmware-vmx-stats}
 
-    # Adding symlinks that the installer would create
+    ############################## Adding symlinks that the installer would create
     for link in licenseTool \
         vmplayer \
         vmware-app-control \
