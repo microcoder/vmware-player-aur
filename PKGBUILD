@@ -28,9 +28,7 @@ pkgrel=1
 arch=('x86_64')
 url='https://www.vmware.com/products/workstation-player.html'
 license=('custom: commercial')
-
-# Pre-Post installation scripts for pacman: https://wiki.archlinux.org/index.php/PKGBUILD#install
-install="scripts.install"
+install="vmware-player.install" # Pre-Post installation scripts for pacman: https://wiki.archlinux.org/index.php/PKGBUILD#install
 
 #-------------------------------------------------------------------
 conflicts=(
@@ -46,6 +44,7 @@ conflicts=(
 depends=(
     # dkms
     # ncurses5-compat-libs      # needed by the --console installer https://aur.archlinux.org/packages/ncurses5-compat-libs/
+    git                       # for download kernel patches
     gtkmm3                    # for the GUI
     fuse2                     # for vmware-vmblock-fuse
     libcanberra               # for event sounds
@@ -96,28 +95,6 @@ md5sums_x86_64=('2fd4b08354ac0e882c74108df489b627'
                 '9d2c6433034063b0f1d5bbd415200b4a'
                 'ddaeb8d78bb152311e30b86bf2534c19'
                 'e535a198f2eae87c2446aa38c6006385')
-
-_patch_kernel_modules() {
-    echo "==> Patch VMWare kernel modules"
-    # INFO: https://github.com/mkubecek/vmware-host-modules/blob/player-15.5.0/INSTALL
-
-    patch_dir="${srcdir}/patched_kernel_modules"
-    rm -rf "${patch_dir}"
-    install -d -m 755 "${patch_dir}"
-    cd "${patch_dir}"
-
-    git clone https://github.com/mkubecek/vmware-host-modules.git
-    cd vmware-host-modules
-    git checkout "player-${pkgver}"
-
-    # wget -c https://github.com/mkubecek/vmware-host-modules/archive/p15.5.0-k5.2.zip
-    # unzip -q p15.5.0-k5.2.zip
-    # rm p15.5.0-k5.2.zip
-    # cd vmware-host-modules-p15.5.0-k5.2
-
-    tar -cf ${srcdir}/extracted/vmware-vmx/lib/modules/source/vmmon.tar vmmon-only
-    tar -cf ${srcdir}/extracted/vmware-vmx/lib/modules/source/vmnet.tar vmnet-only
-}
 
 _copy_files () {
     echo "==> Copying files"
@@ -346,12 +323,6 @@ package() {
     vmware_usbarbitrator_version=$(grep -oPm1 "(?<=<version>)[^<]+" "${srcdir}/extracted/vmware-usbarbitrator/manifest.xml")
     vmware_ovftool_version=$(grep -oPm1 "(?<=<version>)[^<]+" "${srcdir}/extracted/vmware-ovftool/manifest.xml")
     vmware_ovftool_build=$(grep -oPm1 "(?<=<buildNumber>)[^<]+" "${srcdir}/extracted/vmware-ovftool/manifest.xml")
-    
-    # Patching kernel modules if need
-    local current_kernel_version="$(uname -r | cut -d '-' -f 1)"
-    if [[ "${pkgver}" > 14.999 && "${pkgver}" < 16.0 ]] && [[ "${current_kernel_version}" > 4.8 ]]; then
-        _patch_kernel_modules
-    fi;
 
     _copy_files
     _patch_files

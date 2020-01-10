@@ -1,13 +1,41 @@
-# Run right before files are extracted. One argument is passed: new package full version string
+
+patch_kernel_modules() {
+    # INFO: https://github.com/mkubecek/vmware-host-modules/blob/player-15.5.0/INSTALL
+
+    local pkgver=$(echo $1 | sed -e 's/-[0-9]$//')
+    local kernel_branch=$(uname -r | sed -r 's/.[0-9]-[0-9]-.+$//')
+
+    if [[ "${pkgver}" > 14.999 && "${pkgver}" < 16.0 ]] && [[ "${kernel_branch}" > 4.8 ]]; then
+      echo "==> Patch VMWare kernel modules"
+
+      local tmp_dir=$(mktemp -d -t 'vmware_host_modules.XXXXXXX')
+
+      cd "${tmp_dir}"
+      git clone https://github.com/mkubecek/vmware-host-modules.git
+      cd "${tmp_dir}"/vmware-host-modules
+      # git checkout "player-${pkgver}"
+      git checkout p${pkgver}-k${kernel_branch}
+
+      tar -cf /lib/vmware/modules/source/vmmon.tar vmmon-only
+      tar -cf /lib/vmware/modules/source/vmnet.tar vmnet-only
+
+      rm -r "${tmp_dir}"
+    fi
+}
+
+rebuild_kernel_modules(){
+  echo '==> Rebuild all VMWare kernel modules'
+  vmware-modconfig --console --install-all
+}
+
 # pre_install() {
 
 # }
 
-### Run right after files are extracted. One argument is passed: new package full version string
 post_install() {
 
-  # Recompilation all VMWare kernel modules:
-  /usr/bin/vmware-modconfig --console --install-all
+  patch_kernel_modules $1
+  rebuild_kernel_modules
 
   systemctl enable vmware-usbarbitrator.service
   systemctl start vmware-usbarbitrator.service
@@ -17,7 +45,6 @@ post_install() {
 
 }
 
-### Run right before files are extracted. Two arguments are passed in this order: new package full version string, old package full version string
 pre_upgrade() {
 
   systemctl stop vmware-usbarbitrator.service
@@ -28,7 +55,6 @@ pre_upgrade() {
 
 }
 
-### Run after files are extracted. Two arguments are passed in this order: new package full version string, old package full version string
 post_upgrade() {
 
   echo '==> Migration db from /etc/vmware-installer/database.bak to new /etc/vmware-installer/database'
@@ -60,8 +86,8 @@ EOF
 
   rm /etc/vmware-installer/database.bak
 
-  echo '==> Rebuild all VMWare kernel modules'
-  /usr/bin/vmware-modconfig --console --install-all
+  patch_kernel_modules $1
+  rebuild_kernel_modules
 
   systemctl daemon-reload
 
@@ -69,11 +95,10 @@ EOF
   systemctl start vmware-usbarbitrator.service
 }
 
-### Run right before files are removed. One argument is passed: old package full version string
 pre_remove() {
   
   # Calling native VMWare installer/Uninstaller:
-  /usr/bin/vmware-installer -u vmware-player
+  vmware-installer -u vmware-player
 
   systemctl stop vmware-usbarbitrator.service
   systemctl disable vmware-usbarbitrator.service
@@ -83,6 +108,11 @@ pre_remove() {
 
   ############################################################################################################
   ###### This code needed as alternative uninstalling kernel modules instead native vmware uninstaller #######
+
+  # vmci - High performance communication interface between host and guest
+  # vmmon - Virtual Machine Monitor
+  # vmnet - Networking driver
+
   echo 'Remove kernel modules: vmci, vmmon, vmnet'
   
   # Remove kernel modules
@@ -95,11 +125,10 @@ pre_remove() {
     fi
   done
 
-  depmod # Rebuilding modules database (/lib/midules/$(uname -r)/modules*) after deleting files
+  depmod # Rebuilding modules database (/lib/modules/$(uname -r)/modules*)
   ############################################################################################################
 }
 
-### Run right after files are removed. One argument is passed: old package full version string
 post_remove() {
 
   # TODO: Сделать удаление модулей для старых ядер в:
@@ -113,4 +142,5 @@ post_remove() {
 ==> To remove VMware settings, delete: /etc/vmware and /etc/vmware-installer directories.
 
 EOF
+
 }
