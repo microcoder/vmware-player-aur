@@ -1,16 +1,16 @@
-## Compile package
+## For compile the package
 
 ```bash
-$ updpkgsums && makepkg -fs
+$ makepkg -fs
 ```
 
-## Upgrade or add package into system
+## Upgrade or add the package into system
 
 ```bash
 $ sudo pacman -U package_name.pkg.tar.xz
 ```
 
-## Remove package from system
+## Remove the package from system
 
 ```bash
 $ sudo pacman -Rn package_name
