@@ -13,8 +13,7 @@ patch_kernel_modules() {
       cd "${tmp_dir}"
       git clone https://github.com/mkubecek/vmware-host-modules.git
       cd "${tmp_dir}"/vmware-host-modules
-      # git checkout "player-${pkgver}"
-      git checkout p${pkgver}-k${kernel_branch}
+      git checkout p${pkgver}-k${kernel_branch}  # git checkout "player-${pkgver}"
 
       tar -cf /lib/vmware/modules/source/vmmon.tar vmmon-only
       tar -cf /lib/vmware/modules/source/vmnet.tar vmnet-only
@@ -28,9 +27,9 @@ rebuild_kernel_modules(){
   vmware-modconfig --console --install-all
 }
 
-# pre_install() {
-
-# }
+pre_install() {
+  return
+}
 
 post_install() {
 
@@ -50,16 +49,15 @@ pre_upgrade() {
   systemctl stop vmware-usbarbitrator.service
   systemctl stop vmware-networks.service
 
-  echo '==> Backup vmware-installer database: /etc/vmware-installer/database'
+  echo '==> Backup /etc/vmware-installer/database'
   mv /etc/vmware-installer/database /etc/vmware-installer/database.bak
 
 }
 
 post_upgrade() {
 
-  echo '==> Migration db from /etc/vmware-installer/database.bak to new /etc/vmware-installer/database'
+  echo '==> Migration data from /etc/vmware-installer/database.bak to /etc/vmware-installer/database'
 
-  # Migration setting of vmware-installer database
   sqlite3 << EOF
   attach '/etc/vmware-installer/database' as db_new;
   attach '/etc/vmware-installer/database.bak' as db_old;
@@ -97,7 +95,7 @@ EOF
 
 pre_remove() {
   
-  # Calling native VMWare installer/Uninstaller:
+  # Calling native VMWare uninstaller:
   vmware-installer -u vmware-player
 
   systemctl stop vmware-usbarbitrator.service
@@ -137,10 +135,6 @@ post_remove() {
 
   rm -R /usr/lib/vmware-installer
 
-  cat << EOF
-
-==> To remove VMware settings, delete: /etc/vmware and /etc/vmware-installer directories.
-
-EOF
+  echo '==> To remove VMware settings, delete: /etc/vmware and /etc/vmware-installer directories'
 
 }
