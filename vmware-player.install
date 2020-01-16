@@ -3,7 +3,7 @@ patch_kernel_modules() {
     # INFO: https://github.com/mkubecek/vmware-host-modules/blob/player-15.5.0/INSTALL
 
     local pkgver=$(echo $1 | sed -e 's/-[0-9]$//')
-    local kernel_branch=$(uname -r | sed -r 's/.[0-9]-[0-9]-.+$//')
+    local kernel_branch=$(uname -r | sed -r 's/[\.][0-9A-Z\-]+$//')
 
     if [[ "${pkgver}" > 14.999 && "${pkgver}" < 16.0 ]] && [[ "${kernel_branch}" > 4.8 ]]; then
       echo "==> Patch VMWare kernel modules"
@@ -12,7 +12,7 @@ patch_kernel_modules() {
 
       cd "${tmp_dir}"
       git clone https://github.com/mkubecek/vmware-host-modules.git
-      cd "${tmp_dir}"/vmware-host-modules
+      cd vmware-host-modules/
       git checkout p${pkgver}-k${kernel_branch}  # git checkout "player-${pkgver}"
 
       tar -cf /lib/vmware/modules/source/vmmon.tar vmmon-only
@@ -22,8 +22,8 @@ patch_kernel_modules() {
     fi
 }
 
-rebuild_kernel_modules(){
-  echo '==> Rebuild all VMWare kernel modules'
+build_kernel_modules(){
+  echo '==> Build VMWare kernel modules'
   vmware-modconfig --console --install-all
 }
 
@@ -34,7 +34,7 @@ pre_install() {
 post_install() {
 
   patch_kernel_modules $1
-  rebuild_kernel_modules
+  build_kernel_modules
 
   systemctl enable vmware-usbarbitrator.service
   systemctl start vmware-usbarbitrator.service
@@ -85,7 +85,7 @@ EOF
   rm /etc/vmware-installer/database.bak
 
   patch_kernel_modules $1
-  rebuild_kernel_modules
+  build_kernel_modules
 
   systemctl daemon-reload
 
