@@ -2,29 +2,34 @@
 patch_kernel_modules() {
     # INFO: https://github.com/mkubecek/vmware-host-modules/blob/player-15.5.0/INSTALL
 
-    local pkgver=$(echo $1 | sed -e 's/-[0-9]$//')
-    local kernel_branch=$(uname -r | sed -r 's/[\.][0-9A-Z\-]+$//')
+    pkgver=$(echo $1 | sed -e 's/-[0-9]$//')
+    kernel_branch=$(uname -r | sed -r 's/[\.][0-9A-Z\-]+$//')
 
     if [[ "${pkgver}" > 14.999 && "${pkgver}" < 16.0 ]] && [[ "${kernel_branch}" > 4.8 ]]; then
       echo "==> Patch VMWare kernel modules"
 
-      local tmp_dir=$(mktemp -d -t 'vmware_host_modules.XXXXXXX')
+      tmpdir=$(mktemp -d -t 'vmware_host_modules.XXXXXXX')
 
-      cd "${tmp_dir}"
-      git clone https://github.com/mkubecek/vmware-host-modules.git
-      cd vmware-host-modules/
-      git checkout p${pkgver}-k${kernel_branch}  # git checkout "player-${pkgver}"
-
-      tar -cf /lib/vmware/modules/source/vmmon.tar vmmon-only
+      cd "${tmpdir}" && \
+      git clone --single-branch --branch p${pkgver}-k${kernel_branch} https://github.com/mkubecek/vmware-host-modules.git && \
+      cd ./vmware-host-modules && \
+      tar -cf /lib/vmware/modules/source/vmmon.tar vmmon-only && \
       tar -cf /lib/vmware/modules/source/vmnet.tar vmnet-only
 
-      rm -r "${tmp_dir}"
+      rm -r "${tmpdir}"
     fi
 }
 
 build_kernel_modules(){
   echo '==> Build VMWare kernel modules'
   vmware-modconfig --console --install-all
+
+  # FIXME: vmware-modconfig do not work correct, need run manual:
+  # depmod
+  # modprobe vmmon
+  #
+  # Then check, do is running?
+  # lsmod | grep vmmon
 }
 
 pre_install() {

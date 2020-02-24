@@ -15,11 +15,6 @@
 # Попытаться убрать их из /lib/modprobe.d, /lib/modules-load.d и перенести в
 # /etc/modprobe.d и соответственно в /etc/modules-load.d
 
-# FIXME: 
-# Не компилируется модуль vmci после установки пакета. Запустить компиляцию после установки пакета вручную:
-#   sudo vmware-modconfig --console --build-mod vmci
-# Возможно это проблема с ядром Linux 5.4.6 - https://communities.vmware.com/thread/623768
-
 pkgname=vmware-player
 pkgdesc='VMware Player'
 pkgver=15.5.1
