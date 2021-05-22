@@ -14,11 +14,10 @@
 #-------------------------------------------------------------------
 
 pkgname=vmware-player
-pkgdesc='VMware Player'
+pkgdesc='The industry standard for running multiple operating systems as virtual machines on a single Linux PC.'
 pkgver=16.1.2
 pkgbuild=17966106
 pkgrel=1
-pkgdesc='The industry standard for running multiple operating systems as virtual machines on a single Linux PC.'
 arch=('x86_64')
 url='https://www.vmware.com/products/workstation-for-linux.html'
 license=('custom: commercial')
@@ -255,7 +254,6 @@ _copy_files () {
     ln -s /usr/lib/vmware/icu "${pkgdir}/etc/vmware/icu"
     ln -s /usr/lib/vmware-ovftool/ovftool "${pkgdir}/usr/bin/ovftool"
     ln -s /usr/lib/vmware-installer/${vmware_installer_version}/vmware-installer "${pkgdir}/usr/bin/vmware-installer"
-    # ln -s /usr/lib/vmware-installer/${vmware_installer_version}/vmware-uninstall-downgrade "${pkgdir}/usr/bin/vmware-uninstall"
 
 
     # Alternative of install of ncurses5-compat-libs for the GUI vmware-installer wich uses ncurses5-compat-libs
@@ -275,12 +273,6 @@ _copy_files () {
 
 _patch_files () {
     echo "==> Patching files"
-
-    # sed -r \
-    #     -e "s/(.+)vmware-networks --start(.+)/   systemctl start vmware-networks.service/" \
-    #     -e "s/(.+)vmware-networks --stop(.+)/   systemctl stop vmware-networks.service/" \
-    #     -i "${pkgdir}/usr/lib/systemd/scripts/vmware"
-
 
     ### Replace placeholder "variables" with real paths:
 
@@ -312,19 +304,6 @@ _create_db_file () {
     sqlite3 "$database_filename" "CREATE TABLE components(id INTEGER PRIMARY KEY, name VARCHAR NOT NULL, version VARCHAR NOT NULL,
                                                           buildNumber INTEGER NOT NULL, component_core_id INTEGER NOT NULL, longName VARCHAR NOT NULL,
                                                           description VARCHAR, type INTEGER NOT NULL);"
-
-
-    # sqlite3 "$database_filename" "
-    #     INSERT INTO components VALUES(1,'vmware-installer','${vmware_installer_version}',${pkgbuild},-1,'VMware Installer','VMware Installer',1);
-    #     INSERT INTO components VALUES(2,'vmware-player-setup','${pkgver}',${pkgbuild},1,'VMware Player Setup','VMware Player Setup',1);
-    #     INSERT INTO components VALUES(3,'vmware-vmx','${pkgver}',${pkgbuild},1,'VMware VMX','VMware Linux VMX',1);
-    #     INSERT INTO components VALUES(4,'vmware-virtual-printer','1.0',${pkgbuild},1,'VMware Virtual Printer','Virtual Printer Component',1);
-    #     INSERT INTO components VALUES(5,'vmware-network-editor','${pkgver}',${pkgbuild},1,'VMware Network Editor','Network Editor Component for Linux',1);
-    #     INSERT INTO components VALUES(6,'vmware-usbarbitrator','${vmware_usbarbitrator_version}',${pkgbuild},1,'VMware USB Arbitrator','USB Arbitrator Component for Linux',1);
-    #     INSERT INTO components VALUES(7,'vmware-player-app','${pkgver}',${pkgbuild},1,'VMware Player Application','VMware Player Application for Linux',1);
-    #     INSERT INTO components VALUES(8,'vmware-ovftool','${vmware_ovftool_version}',${vmware_ovftool_build},1,'VMware OVF Tool component for Linux','VMware OVF Tool is a command-line utility that allows you to import and export OVF packages to and from many VMware products.',1);
-    #     INSERT INTO components VALUES(9,'vmware-player','${pkgver}',${pkgbuild},1,'VMware Player','VMware Player for Linux',0);
-    # "
 }
 
 prepare() {
