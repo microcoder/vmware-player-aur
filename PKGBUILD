@@ -15,8 +15,8 @@
 
 pkgname=vmware-player
 pkgdesc='The industry standard for running multiple operating systems as virtual machines on a single Linux PC.'
-pkgver=16.1.2
-pkgbuild=17966106
+pkgver=16.2.3
+pkgbuild=19376536
 pkgrel=1
 arch=('x86_64')
 url='https://www.vmware.com/products/workstation-for-linux.html'
@@ -72,7 +72,7 @@ backup=(
 #-------------------------------------------------------------------
 
 source_x86_64=(
-    "VMware-Player-${pkgver}-${pkgbuild}.${CARCH}.bundle::https://download3.vmware.com/software/player/file/VMware-Player-${pkgver}-${pkgbuild}.${CARCH}.bundle"
+    "VMware-Player-Full-${pkgver}-${pkgbuild}.${CARCH}.bundle::https://download3.vmware.com/software/player/file/VMware-Player-Full-${pkgver}-${pkgbuild}.${CARCH}.bundle"
     
     vmware-bootstrap
     vmware-config                    # Main file configuration, installing to /etc/vmware/config
@@ -86,7 +86,7 @@ source_x86_64=(
 )
 
 # For update/generate MD5 sum for source files, run `updpkgsums`
-md5sums_x86_64=('f50090a394730f20c0ae9c715e56f6ed'
+md5sums_x86_64=('d8da1dda9969c4013967ec66f00a2b52'
                 '9d2c6433034063b0f1d5bbd415200b4a'
                 'ddaeb8d78bb152311e30b86bf2534c19'
                 'f4b02ac9152d6572d56f3b0243ca6935'
@@ -311,7 +311,7 @@ prepare() {
     # You can verify this with the `file` utility: $ file VMware-Player-*.bundle
     extracted_dir="${srcdir}/extracted"
     [[ -d "$extracted_dir" ]] && rm -r "$extracted_dir"
-    bash "$(readlink -f "${srcdir}/VMware-Player-${pkgver}-${pkgbuild}.${CARCH}.bundle")" --extract "$extracted_dir"
+    bash "$(readlink -f "${srcdir}/VMware-Player-Full-${pkgver}-${pkgbuild}.${CARCH}.bundle")" --extract "$extracted_dir"
 }
 
 package() {

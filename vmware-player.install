@@ -34,11 +34,11 @@ download_patched_modules(){
       tmpdir=$(mktemp -d -t 'vmware_host_modules.XXXXXXX')
 
       cd "${tmpdir}" && \
-      echo "==> Download to temp dir: ${tmpdir}/p${pkgver}.tar.gz" && \
-      wget -nv https://github.com/mkubecek/vmware-host-modules/archive/refs/tags/p${pkgver}.tar.gz && \
-      echo "==> Extracting archive: p${pkgver}.tar.gz" && \
-      tar -xzf p${pkgver}.tar.gz && \
-      cd vmware-host-modules-p${pkgver} && \
+      echo "==> Download to temp dir: ${tmpdir}/p${pkgver}-k${kernel_branch}.tar.gz" && \
+      wget -nv https://github.com/mkubecek/vmware-host-modules/archive/refs/tags/p${pkgver}-k${kernel_branch}.tar.gz && \
+      echo "==> Extracting archive: p${pkgver}-k${kernel_branch}.tar.gz" && \
+      tar -xzf p${pkgver}-k${kernel_branch}.tar.gz && \
+      cd vmware-host-modules-p${pkgver}-k${kernel_branch} && \
       tar -cf vmmon.tar vmmon-only && \
       tar -cf vmnet.tar vmnet-only && \
       cp -v vmmon.tar vmnet.tar /usr/lib/vmware/modules/source/
@@ -182,6 +182,6 @@ post_remove() {
 
   rm -R /usr/lib/vmware-installer
 
-  echo '==> To remove VMware settings, delete directories: /etc/vmware and /etc/vmware-installer'
+  echo '==> To remove VMware settings complete, need to delete directories: /etc/vmware and /etc/vmware-installer'
 
 }
