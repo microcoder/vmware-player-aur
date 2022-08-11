@@ -15,8 +15,9 @@
 
 pkgname=vmware-player
 pkgdesc='The industry standard for running multiple operating systems as virtual machines on a single Linux PC.'
-pkgver=16.2.3
-pkgbuild=19376536
+pkgver=16.2.4
+_pkgver=$(echo "${pkgver}" | sed 's/\.//g')
+pkgbuild=20089737
 pkgrel=1
 arch=('x86_64')
 url='https://www.vmware.com/products/workstation-for-linux.html'
@@ -72,8 +73,7 @@ backup=(
 #-------------------------------------------------------------------
 
 source_x86_64=(
-    "VMware-Player-Full-${pkgver}-${pkgbuild}.${CARCH}.bundle::https://download3.vmware.com/software/player/file/VMware-Player-Full-${pkgver}-${pkgbuild}.${CARCH}.bundle"
-    
+    "VMware-Player-Full-${pkgver}-${pkgbuild}.${CARCH}.bundle::https://download3.vmware.com/software/WKST-PLAYER-${_pkgver}/VMware-Player-Full-${pkgver}-${pkgbuild}.${CARCH}.bundle"
     vmware-bootstrap
     vmware-config                    # Main file configuration, installing to /etc/vmware/config
     vmware-configure-initscript.sh
